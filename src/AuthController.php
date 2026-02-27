@@ -18,7 +18,7 @@ class AuthController extends Controller
 
         $authUser = $this->findOrCreateUser($user);
 
-        auth()->login($authUser, true);
+        auth()->login($authUser, config('azure-oath.remember_me', false));
 
         // session([
         //     'azure_user' => $user

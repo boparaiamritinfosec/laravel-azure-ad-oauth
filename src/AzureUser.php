@@ -23,9 +23,41 @@ class AzureUser
 
     public function roles()
     {
-        $tokens = explode('.', $this->user->idToken);
+        $idToken = $this->user->idToken;
+        $tokens = explode('.', $idToken);
 
-        return json_decode(static::urlsafeB64Decode($tokens[1]))->roles;
+        if (count($tokens) !== 3) {
+            throw new \RuntimeException('Invalid id_token format: expected 3 segments');
+        }
+
+        $payload = json_decode(static::urlsafeB64Decode($tokens[1]));
+
+        if (!$payload) {
+            throw new \RuntimeException('Invalid id_token: could not decode payload');
+        }
+
+        // Validate token expiry
+        if (isset($payload->exp) && $payload->exp < time()) {
+            throw new \RuntimeException('id_token has expired');
+        }
+
+        // Validate audience matches our client_id
+        $clientId = config('azure-oath.credentials.client_id');
+        if (isset($payload->aud) && $payload->aud !== $clientId) {
+            throw new \RuntimeException('id_token audience does not match client_id');
+        }
+
+        // Validate issuer is from Microsoft login
+        if (isset($payload->iss) && strpos($payload->iss, 'https://sts.windows.net/') !== 0
+            && strpos($payload->iss, 'https://login.microsoftonline.com/') !== 0) {
+            throw new \RuntimeException('id_token issuer is not a valid Microsoft endpoint');
+        }
+
+        if (!isset($payload->roles) || !is_array($payload->roles)) {
+            return [];
+        }
+
+        return $payload->roles;
     }
 
     public static function urlsafeB64Decode($input)
